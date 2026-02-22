@@ -57,11 +57,57 @@ def usage_of_named_tuple():
     print(book.author)  # Output: Harper Lee
     print(book.year)  # Output: 1960
 
+def usage_of_dict1():
+    key_val: dict[str,str] = {"key1": "value1", "key2": "value2", "key3": "value3"}
+    print(key_val)
+
+    # Accessing dictionary elements by key
+    for key in key_val:
+        print(f"Key: {key}, Value: {key_val[key]}")
+
+    # Nested dictionary
+    config = {
+        "db": {"host": "localhost", "port": 5432},
+        "cache": {"ttl": 3600}
+    }
+    for key, value in config.items():
+        print(f"Key: {key}, Value: {value}")
+
+    keys = ["a", "b", "c"]
+    values = [1, 2, 3]
+    d = dict(zip(keys, values))
+
+    for key,val in d.items():
+        print(f"Key: {key}, Value: {val}")
+
+    some_val = d["a"]
+    print(f"Value of a: {some_val}" )
+
+    # The following line will raise a KeyError
+    # some_val = d["d"]
+    # print(f"Value of a: {some_val}" )
+    # To solve the above problem
+    some_val = d.get("d") # Correct
+    some_val = d.get("d", "some default value")
+    print(f"Value of a: {some_val}" )
+
+    # Merge two dictionaries
+    dict1 = {"a": 1, "b": 2}
+    dict2 = {"b": 3, "c": 4}
+    merged = dict1 | dict2  # {'a': 1, 'b': 3, 'c': 4}
+
+    # Dynamically create dictionary
+    data: dict[str,int] = {}
+    for i in range(5):
+        data[f"key_{i}"] = i * 10
+    # {'key_0': 0, 'key_1': 10, 'key_2': 20, 'key_3': 30, 'key_4': 40}
+    print(f"Data------>{data}")
 
 
 if __name__ == '__main__':
     # tuple_ops1()
-    usage_of_named_tuple()
+    # usage_of_named_tuple()
+    usage_of_dict1()
 
 
 
