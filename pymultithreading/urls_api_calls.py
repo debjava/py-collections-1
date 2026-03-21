@@ -1,11 +1,11 @@
 import asyncio
+import multiprocessing
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any
+from typing import Any, List
 
 import aiohttp
 import requests
-from requests import Response
 
 def make_api_call(url: str) -> Any:
     response = requests.get(url)
@@ -17,58 +17,37 @@ def make_api_call(url: str) -> Any:
     return response_json
 
 def get_response_from_url(url: str):
-    response = requests.get(url)
-    response_json: Any = response.json()
-    return url, response.status_code, response_json
+    try:
+        response = requests.get(url, timeout=10)
+        response_json: Any = response.json()
+        return url, response.status_code, response_json
+    except (requests.exceptions.ConnectionError, 
+            requests.exceptions.RequestException, 
+            requests.exceptions.Timeout) as e:
+        print(f"Error fetching {url}: {str(e)}")
+        return url, -1, {"error": str(e)}
 
-def get_object_urls():
-    object_urls_list: list[str] = []
-    for i in range(1,14):
-        call_url = f"https://api.restful-api.dev/objects/{i}"
-        object_urls_list.append(call_url)
-    return object_urls_list
+def get_response_from_url11(url: str):
+    try:
+        response = requests.get(url, timeout=10)
+        response_json: Any = response.json()
+        return url, response.status_code, response_json
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching {url}: {str(e)}")
+        return url, -1, {"error": str(e)}
 
-def get_all_countries() -> dict[str,str]:
-    country_id_name_dict: dict[str, str] = dict()
-    all_country_url = f"https://apihero-api.quixtools.com/api/v1/location/getCountriesAll"
-    response = requests.get(all_country_url)
-    if response.status_code != 200:
-        print(f"Request failed. Status code: {response.status_code}")
-        print(f"Response text: {response.text}")
-        return country_id_name_dict
-    response_json: Response = response.json()
-    # print(f"Response: {response_json}")
-    for country in response_json.get("data", []):
-        country_id = country.get("countryId")
-        country_name = country.get("countryName")
-        # print(f"Country Id: {country_id}, Country Name: {country_name}")
-        if country_id is not None and country_name is not None:
-            country_id_name_dict[country_id] = country_name
 
-    return country_id_name_dict
-
-def get_all_urls_by_country_id() -> list[str]:
+def get_300_api_urls():
     all_urls: list[str] = list()
-    country_dict: dict[str, str] = get_all_countries()
-    for country_id, value in country_dict.items():
-        url_by_country_id = f"https://apihero-api.quixtools.com/api/v1/location/getCountry/{country_id}"
-        all_urls.append(url_by_country_id)
-
-    return all_urls
-
-
-def get_all_urls():
-    all_urls: list[str] = list()
-    object_urls: list[str] = get_object_urls()
-    country_urls: list[str] = get_all_urls_by_country_id()
-    all_urls.extend(object_urls)
-    all_urls.extend(country_urls)
-
+    for i in range(1,301):
+        url = f"https://jsonplaceholder.typicode.com/comments/{i}"
+        all_urls.append(url)
     return all_urls
 
 def make_sequential_api_call():
     response_list: list[Any] = list()
-    urls_list: list[str] = get_all_urls()
+    # urls_list: list[str] = get_all_urls()
+    urls_list: list[str] = get_300_api_urls()
     for url in urls_list:
         # json_response = make_api_call(url)
         response_details: Any = get_response_from_url(url)
@@ -88,8 +67,9 @@ def make_sequential_api_call():
 def make_parallel_api_call():
     results = []
     url_to_status: dict[str, dict[str, Any]] = {}
-    urls_list: list[str] = get_all_urls()
+    urls_list: list[str] = get_300_api_urls()
 
+    # Total Maximum Threads: 4
     with ThreadPoolExecutor(max_workers=4) as executor:
         futures_result = [] # It is list of future
         for url in urls_list:
@@ -104,6 +84,34 @@ def make_parallel_api_call():
         print(f"Response Status: {status}")
         results.append((url, status, response_json))
 
+    return url_to_status
+
+def make_parallel_api_call11():
+    results = []
+    url_to_status: dict[str, dict[str, Any]] = {}
+    urls_list: list[str] = get_300_api_urls()
+
+    total_threads: int = multiprocessing.cpu_count() * 4 # Total No of Core 8, total threads 8 * 4 = 32
+    max_worker_count: int = min(len(urls_list), total_threads) # Total threads: 32
+    executor = ThreadPoolExecutor(max_workers=max_worker_count)
+    
+    try:
+        futures_result = [] # It is list of future
+        for url in urls_list:
+            future = executor.submit(get_response_from_url, url)
+            futures_result.append(future)
+
+        # Collect results as they finish
+        for future in as_completed(futures_result):
+            url, status, response_json = future.result()
+            url_to_status[url] = {"status": status, "json": response_json}
+            print(f"Completed API Call URL: {url}")
+            print(f"Response Status: {status}")
+            results.append((url, status, response_json))
+            
+    finally:
+        executor.shutdown()
+    
     return url_to_status
 
 async def make_api_call_async(session: aiohttp.ClientSession, url: str) -> tuple[str, int, Any]:
@@ -122,12 +130,13 @@ async def make_api_call_async(session: aiohttp.ClientSession, url: str) -> tuple
         return url, 0, {}
 
 async def make_parallel_call_asyncio():
-    urls_list: list[str] = get_all_urls()
+    urls_list: list[str] = get_300_api_urls()
+    print(f"Total URLs: {len(urls_list)}")
     
     async with aiohttp.ClientSession() as session:
-        tasks = []
+        tasks: List[asyncio.Task[tuple[str, int, Any]]] = list()
         for url in urls_list:
-            task = make_api_call_async(session, url)
+            task = asyncio.create_task(make_api_call_async(session, url))
             tasks.append(task)
         
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -152,11 +161,15 @@ if __name__ == "__main__":
     start_time_s = time.perf_counter()
 
     # make_sequential_api_call() # 264 seconds
-    # make_parallel_api_call() # 85.766622 seconds
-    asyncio.run(make_parallel_call_asyncio()) # 4.787933 seconds
+    # make_parallel_api_call() # 83 - 111 seconds
+    # make_parallel_api_call11() # 58 seconds
+    asyncio.run(make_parallel_call_asyncio()) # 3.700589 seconds, 4 seconds
 
     end_time_s = time.perf_counter()
     print(f"Time taken: {end_time_s - start_time_s:.6f} seconds") # Time taken: 240.905411 seconds
+    # print(f"multiprocessing.cpu_count()------>{multiprocessing.cpu_count()}") # 8
+    # max_worker_count: int = multiprocessing.cpu_count() * 4
+    # print(f"Total worker count: {max_worker_count}")
 
 
 
